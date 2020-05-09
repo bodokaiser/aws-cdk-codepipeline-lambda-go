@@ -1,3 +1,4 @@
+import { GraphQLApi } from '@aws-cdk/aws-appsync'
 import { App, Duration, Stack, StackProps } from '@aws-cdk/core'
 import { BuildSpec, ComputeType, PipelineProject, LinuxBuildImage } from '@aws-cdk/aws-codebuild'
 import { Artifact, Pipeline } from '@aws-cdk/aws-codepipeline'
@@ -11,6 +12,7 @@ import { CfnParametersCode } from '@aws-cdk/aws-lambda'
 
 interface PipelineStackProps extends StackProps {
   code: CfnParametersCode
+  graphql: GraphQLApi
 }
 
 export class PipelineStack extends Stack {
@@ -21,6 +23,28 @@ export class PipelineStack extends Stack {
       repositoryName: 'pets',
     })
 
+    const webBuild = new PipelineProject(this, 'WebBuild', {
+      buildSpec: BuildSpec.fromObject({
+        version: '0.2',
+        phases: {
+          install: {
+            commands: ['cd web', 'yarn install'],
+          },
+          build: {
+            commands: 'yarn run build',
+          },
+        },
+        artifacts: {
+          'base-directory': 'web/build',
+          files: ['**/*'],
+        },
+      }),
+      environment: {
+        buildImage: LinuxBuildImage.STANDARD_4_0,
+        computeType: ComputeType.SMALL,
+      },
+      timeout: Duration.minutes(10),
+    })
     const cdkBuild = new PipelineProject(this, 'CdkBuild', {
       buildSpec: BuildSpec.fromObject({
         version: '0.2',
@@ -68,6 +92,7 @@ export class PipelineStack extends Stack {
 
     const sourceArtifact = new Artifact('SourceArtifact')
     const cdkArtifact = new Artifact('CdkArtifact')
+    const webArtifact = new Artifact('WebArtifact')
     const lambdaArtifact = new Artifact('LambdaArtifact')
 
     new Pipeline(this, 'Pipeline', {
@@ -96,6 +121,15 @@ export class PipelineStack extends Stack {
               project: cdkBuild,
               input: sourceArtifact,
               outputs: [cdkArtifact],
+            }),
+            new CodeBuildAction({
+              actionName: 'WebBuild',
+              project: webBuild,
+              input: sourceArtifact,
+              outputs: [webArtifact],
+              environmentVariables: {
+                REACT_APP_GRAPHQL_URL: { value: props.graphql.graphQlUrl },
+              },
             }),
           ],
         },

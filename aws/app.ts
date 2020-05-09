@@ -14,6 +14,7 @@ const lambdaStack = new LambdaStack(app, 'PetsLambdaStack', {
 
 const pipelineStack = new PipelineStack(app, 'PetsPipelineStack', {
   code: lambdaStack.code,
+  graphql: graphqlStack.api,
 })
 
 app.synth()
